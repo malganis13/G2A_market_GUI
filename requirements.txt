@@ -1,0 +1,24 @@
+# GUI Framework
+PyQt6>=6.6.0
+qasync>=0.27.0
+
+# API and HTTP
+httpx>=0.25.0
+curl-cffi>=0.6.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Database
+sqlite3  # Built-in
+
+# Async
+aiofiles>=23.2.1
+
+# Data Processing
+requests>=2.31.0
+
+# Telegram (optional)
+python-telegram-bot>=20.7
+
+# Utilities
+python-dotenv>=1.0.0
