@@ -9,7 +9,7 @@ import sys
 import asyncio
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from gui.main_window import MainWindow
 import qasync
 
@@ -23,12 +23,15 @@ def setup_directories():
 
 def main():
     """Главная функция запуска приложения"""
-    # Включаем high DPI scaling
-    QApplication.setHighDpiScaleFactorRoundingPolicy(
-        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
-    )
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_EnableHighDpiScaling)
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_UseHighDpiPixmaps)
+    # В PyQt6 High DPI scaling включен по умолчанию
+    # Устанавливаем только политику округления
+    try:
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+    except AttributeError:
+        # Если этот метод тоже не существует, продолжаем
+        pass
     
     # Создаем приложение
     app = QApplication(sys.argv)
