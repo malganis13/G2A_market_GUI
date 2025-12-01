@@ -1,51 +1,100 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+G2A API Client with JSON-first configuration loading
+"""
+
 import asyncio
 import hashlib
 import json
 import os
 from curl_cffi.requests import AsyncSession
 
-# Попытка загрузить из JSON файла (приоритет)
+# === ЗАГРУЗКА КОНФИГУРАЦИИ ===
 G2A_CLIENT_ID = ""
 G2A_CLIENT_SECRET = ""
 G2A_CLIENT_EMAIL = ""
 G2A_API_BASE = "https://api.g2a.com"
-REQUEST_TIMEOUT = 30
+REQUEST_TIMEOUT = 60  # Увеличил таймаут до 60 секунд
 
-# Сначала пробуем загрузить из JSON (из GUI)
-config_file = "g2a_config_saved.json"
-if os.path.exists(config_file):
+config_loaded_from = None
+
+# 1. ПРИОРИТЕТ: Загрузка из JSON файла (из GUI Settings)
+JSON_CONFIG_FILE = "g2a_config_saved.json"
+if os.path.exists(JSON_CONFIG_FILE):
     try:
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(JSON_CONFIG_FILE, 'r', encoding='utf-8') as f:
             config = json.load(f)
-            G2A_CLIENT_ID = config.get('G2A_CLIENT_ID', '')
-            G2A_CLIENT_SECRET = config.get('G2A_CLIENT_SECRET', '')
-            G2A_CLIENT_EMAIL = config.get('G2A_CLIENT_EMAIL', '')
-            print(f"✅ Loaded G2A config from {config_file}")
-            print(f"   Client ID: {G2A_CLIENT_ID[:10]}...")
-            print(f"   Email: {G2A_CLIENT_EMAIL}")
+            
+        # Загружаем только если ВСЕ поля заполнены
+        client_id = config.get('G2A_CLIENT_ID', '').strip()
+        client_secret = config.get('G2A_CLIENT_SECRET', '').strip()
+        client_email = config.get('G2A_CLIENT_EMAIL', '').strip()
+        
+        if client_id and client_secret and client_email:
+            G2A_CLIENT_ID = client_id
+            G2A_CLIENT_SECRET = client_secret
+            G2A_CLIENT_EMAIL = client_email
+            config_loaded_from = "JSON (GUI Settings)"
+            print(f"\n✅ G2A Config loaded from: {JSON_CONFIG_FILE}")
+            print(f"   📧 Email: {G2A_CLIENT_EMAIL}")
+            print(f"   🔑 Client ID: {G2A_CLIENT_ID[:15]}...\n")
+        else:
+            print(f"⚠️  {JSON_CONFIG_FILE} exists but incomplete (missing fields)")
     except Exception as e:
-        print(f"⚠️ Error loading {config_file}: {e}")
+        print(f"❌ Error loading {JSON_CONFIG_FILE}: {e}")
 
-# Если не загрузилось из JSON, пробуем из .py файла
-if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET:
+# 2. FALLBACK: Загрузка из g2a_config.py (только если JSON не загрузился)
+if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET or not G2A_CLIENT_EMAIL:
     try:
-        from g2a_config import G2A_API_BASE as _API_BASE
-        from g2a_config import G2A_CLIENT_ID as _CLIENT_ID
-        from g2a_config import G2A_CLIENT_SECRET as _CLIENT_SECRET
-        from g2a_config import REQUEST_TIMEOUT as _TIMEOUT
+        from g2a_config import (
+            G2A_API_BASE as _API_BASE,
+            G2A_CLIENT_ID as _CLIENT_ID,
+            G2A_CLIENT_SECRET as _CLIENT_SECRET,
+            REQUEST_TIMEOUT as _TIMEOUT
+        )
+        
+        # Пытаемся загрузить email
         try:
             from g2a_config import G2A_CLIENT_EMAIL as _CLIENT_EMAIL
         except ImportError:
-            _CLIENT_EMAIL = "your_email@gmail.com"
+            _CLIENT_EMAIL = ""
         
-        G2A_CLIENT_ID = _CLIENT_ID
-        G2A_CLIENT_SECRET = _CLIENT_SECRET
-        G2A_CLIENT_EMAIL = _CLIENT_EMAIL
-        G2A_API_BASE = _API_BASE
-        REQUEST_TIMEOUT = _TIMEOUT
-        print(f"✅ Loaded G2A config from g2a_config.py")
+        # Проверяем что это не плейсхолдеры
+        if (_CLIENT_ID and _CLIENT_SECRET and _CLIENT_EMAIL and
+            _CLIENT_EMAIL != "G2A_CLIENT_EMAIL" and
+            "@" in _CLIENT_EMAIL):
+            
+            G2A_CLIENT_ID = _CLIENT_ID
+            G2A_CLIENT_SECRET = _CLIENT_SECRET
+            G2A_CLIENT_EMAIL = _CLIENT_EMAIL
+            G2A_API_BASE = _API_BASE
+            REQUEST_TIMEOUT = _TIMEOUT
+            config_loaded_from = "Python file (g2a_config.py)"
+            print(f"\n✅ G2A Config loaded from: g2a_config.py")
+            print(f"   📧 Email: {G2A_CLIENT_EMAIL}")
+            print(f"   🔑 Client ID: {G2A_CLIENT_ID[:15]}...\n")
+        else:
+            print("⚠️  g2a_config.py exists but has invalid/placeholder values")
+            
     except ImportError:
-        print("⚠️ No g2a_config found. Please configure in Settings tab.")
+        print("⚠️  g2a_config.py not found")
+
+# 3. Проверка что конфигурация загружена
+if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET or not G2A_CLIENT_EMAIL:
+    print("\n" + "="*60)
+    print("❌ G2A API CREDENTIALS NOT CONFIGURED!")
+    print("="*60)
+    print("\nPlease configure your G2A API credentials:")
+    print("\n1. Open the application")
+    print("2. Go to ⚙️ Settings tab")
+    print("3. Fill in:")
+    print("   • Client ID")
+    print("   • Client Secret")
+    print("   • Email (your G2A account email)")
+    print("4. Click 'Save G2A Settings'")
+    print("5. Restart the application")
+    print("\n" + "="*60 + "\n")
 
 from proxy_manager import ProxyManager
 from color_utils import print_success, print_error, print_warning, print_info
@@ -90,22 +139,38 @@ class G2AApiClient:
         if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET or not G2A_CLIENT_EMAIL:
             raise Exception(
                 "❌ G2A API credentials not configured!\n\n"
-                "Please go to Settings tab and configure:\n"
+                "Please go to Settings tab (⚙️) and configure:\n"
                 "• Client ID\n"
                 "• Client Secret\n"
-                "• Email (same as your G2A account)"
+                "• Email (same as your G2A account)\n\n"
+                "Then restart the application."
             )
+        
+        # Проверка что email не плейсхолдер
+        if G2A_CLIENT_EMAIL == "G2A_CLIENT_EMAIL" or "@" not in G2A_CLIENT_EMAIL:
+            raise Exception(
+                f"❌ Invalid email: {G2A_CLIENT_EMAIL}\n\n"
+                "Please go to Settings tab and enter your REAL G2A account email!\n"
+                "Example: yourname@gmail.com"
+            )
+        
+        print(f"\n🔧 Initializing G2A API Client...")
+        print(f"   Config source: {config_loaded_from}")
+        print(f"   Email: {G2A_CLIENT_EMAIL}")
+        print(f"   Timeout: {REQUEST_TIMEOUT}s\n")
         
         self.api_key = self.generate_api_key()
         self.auth_header = f"{G2A_CLIENT_ID}, {self.api_key}"
         self.session = None
         self.token = None
         self.proxy_manager = ProxyManager()
+        
         headers = {
             "Authorization": self.auth_header,
             "Accept": "application/json",
             "Content-Type": "application/json"
         }
+        
         proxy = self.proxy_manager.get_current_proxy()
         self.session = AsyncSession(
             headers=headers,
@@ -123,8 +188,8 @@ class G2AApiClient:
         data = f"{G2A_CLIENT_ID}{G2A_CLIENT_EMAIL}{G2A_CLIENT_SECRET}"
         api_key = hashlib.sha256(data.encode()).hexdigest()
         print(f"🔑 API Key generated")
-        print(f"   Email used: {G2A_CLIENT_EMAIL}")
-        print(f"   Hash: {api_key[:16]}...")
+        print(f"   Formula: sha256(ClientID + Email + Secret)")
+        print(f"   Result: {api_key[:20]}...{api_key[-10:]}\n")
         return api_key
 
     def is_auth_error(self, status_code, response_text=""):
@@ -138,6 +203,8 @@ class G2AApiClient:
 
     async def get_token(self):
         """Получение OAuth токена для G2A API"""
+        print("🔐 Requesting OAuth token...")
+        
         response = await self.session.post(
             f"{G2A_API_BASE}/oauth/token",
             json={
@@ -148,14 +215,16 @@ class G2AApiClient:
         )
 
         if response.status_code == 200:
-            self.token = response.json()["access_token"]
-            print("✅ OAuth token obtained")
+            token_data = response.json()
+            self.token = token_data["access_token"]
+            print(f"✅ OAuth token obtained")
+            print(f"   Token: {self.token[:15]}...{self.token[-10:]}\n")
         else:
             error_text = response.text
-            print(f"❌ Token error: {response.status_code}")
-            print(f"   Response: {error_text}")
+            print(f"❌ Token request failed!")
+            print(f"   Status: {response.status_code}")
+            print(f"   Response: {error_text}\n")
             raise Exception(f"Token error: {response.status_code} - {error_text}")
-
 
     async def get_rate(self):
         try:
@@ -179,7 +248,11 @@ class G2AApiClient:
         all_offers = {}
         page = 1
 
+        print(f"📦 Fetching offers from G2A API...")
+        
         while True:
+            print(f"   Page {page}...", end=" ")
+            
             response = await self.session.get(
                 f"{G2A_API_BASE}/v3/sales/offers",
                 headers=headers,
@@ -190,6 +263,7 @@ class G2AApiClient:
             )
 
             if response.status_code != 200:
+                print(f"❌ Failed (HTTP {response.status_code})")
                 if self.is_auth_error(response.status_code, response.text):
                     raise Exception(f"401 Unauthorized: {response.text}")
                 return {
@@ -200,6 +274,8 @@ class G2AApiClient:
             data = response.json()
             offers_data = data.get("data", [])
             meta = data.get("meta", {})
+            
+            print(f"✓ {len(offers_data)} offers")
 
             for offer in offers_data:
                 product_id = str(offer.get("product", {}).get("id"))
@@ -221,6 +297,8 @@ class G2AApiClient:
                 break
 
             page += 1
+        
+        print(f"\n✅ Total offers loaded: {len(all_offers)}\n")
 
         return {
             "success": True,
