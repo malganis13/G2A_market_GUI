@@ -1,20 +1,58 @@
 import asyncio
 import hashlib
 import json
+import os
 from curl_cffi.requests import AsyncSession
-try:
-    from g2a_config import G2A_API_BASE, G2A_CLIENT_ID, G2A_CLIENT_SECRET, G2A_CLIENT_EMAIL, REQUEST_TIMEOUT
-except ImportError:
-    # Если нет G2A_CLIENT_EMAIL в старом конфиге
-    from g2a_config import G2A_API_BASE, G2A_CLIENT_ID, G2A_CLIENT_SECRET, REQUEST_TIMEOUT
-    G2A_CLIENT_EMAIL = "your_email@gmail.com"  # Заглушка
+
+# Попытка загрузить из JSON файла (приоритет)
+G2A_CLIENT_ID = ""
+G2A_CLIENT_SECRET = ""
+G2A_CLIENT_EMAIL = ""
+G2A_API_BASE = "https://api.g2a.com"
+REQUEST_TIMEOUT = 30
+
+# Сначала пробуем загрузить из JSON (из GUI)
+config_file = "g2a_config_saved.json"
+if os.path.exists(config_file):
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+            G2A_CLIENT_ID = config.get('G2A_CLIENT_ID', '')
+            G2A_CLIENT_SECRET = config.get('G2A_CLIENT_SECRET', '')
+            G2A_CLIENT_EMAIL = config.get('G2A_CLIENT_EMAIL', '')
+            print(f"✅ Loaded G2A config from {config_file}")
+            print(f"   Client ID: {G2A_CLIENT_ID[:10]}...")
+            print(f"   Email: {G2A_CLIENT_EMAIL}")
+    except Exception as e:
+        print(f"⚠️ Error loading {config_file}: {e}")
+
+# Если не загрузилось из JSON, пробуем из .py файла
+if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET:
+    try:
+        from g2a_config import G2A_API_BASE as _API_BASE
+        from g2a_config import G2A_CLIENT_ID as _CLIENT_ID
+        from g2a_config import G2A_CLIENT_SECRET as _CLIENT_SECRET
+        from g2a_config import REQUEST_TIMEOUT as _TIMEOUT
+        try:
+            from g2a_config import G2A_CLIENT_EMAIL as _CLIENT_EMAIL
+        except ImportError:
+            _CLIENT_EMAIL = "your_email@gmail.com"
+        
+        G2A_CLIENT_ID = _CLIENT_ID
+        G2A_CLIENT_SECRET = _CLIENT_SECRET
+        G2A_CLIENT_EMAIL = _CLIENT_EMAIL
+        G2A_API_BASE = _API_BASE
+        REQUEST_TIMEOUT = _TIMEOUT
+        print(f"✅ Loaded G2A config from g2a_config.py")
+    except ImportError:
+        print("⚠️ No g2a_config found. Please configure in Settings tab.")
+
 from proxy_manager import ProxyManager
 from color_utils import print_success, print_error, print_warning, print_info
 import functools
 
 def handle_api_exception(e):
     """Вспомогательная функция для обработки исключений API"""
-    # Если это ошибка авторизации, пробрасываем её для декоратора
     if ("401" in str(e) or "unauthorized" in str(e).lower()):
         raise e
     return {
@@ -30,7 +68,6 @@ def auto_refresh_token(func):
             return await func(self, *args, **kwargs)
         except Exception as e:
             error_str = str(e).lower()
-            # Проверяем, является ли это ошибкой авторизации
             if ("401" in error_str or 
                 "unauthorized" in error_str or 
                 ("token" in error_str and ("expired" in error_str or "invalid" in error_str))):
@@ -44,12 +81,21 @@ def auto_refresh_token(func):
                     print_error(f"❌ Ошибка обновления токена: {token_error}")
                     raise e
             else:
-                # Если это не ошибка авторизации, пробрасываем исключение дальше
                 raise e
     return wrapper
 
 class G2AApiClient:
     def __init__(self):
+        # Проверка что есть credentials
+        if not G2A_CLIENT_ID or not G2A_CLIENT_SECRET or not G2A_CLIENT_EMAIL:
+            raise Exception(
+                "❌ G2A API credentials not configured!\n\n"
+                "Please go to Settings tab and configure:\n"
+                "• Client ID\n"
+                "• Client Secret\n"
+                "• Email (same as your G2A account)"
+            )
+        
         self.api_key = self.generate_api_key()
         self.auth_header = f"{G2A_CLIENT_ID}, {self.api_key}"
         self.session = None
@@ -74,11 +120,11 @@ class G2AApiClient:
 
     def generate_api_key(self):
         """Генерация API ключа для G2A аутентификации"""
-        # ИСПОЛЬЗУЕМ EMAIL ИЗ КОНФИГА!
-        client_email = G2A_CLIENT_EMAIL
-        data = f"{G2A_CLIENT_ID}{client_email}{G2A_CLIENT_SECRET}"
+        data = f"{G2A_CLIENT_ID}{G2A_CLIENT_EMAIL}{G2A_CLIENT_SECRET}"
         api_key = hashlib.sha256(data.encode()).hexdigest()
-        print(f"🔑 API Key generated with email: {client_email}")
+        print(f"🔑 API Key generated")
+        print(f"   Email used: {G2A_CLIENT_EMAIL}")
+        print(f"   Hash: {api_key[:16]}...")
         return api_key
 
     def is_auth_error(self, status_code, response_text=""):
@@ -103,8 +149,12 @@ class G2AApiClient:
 
         if response.status_code == 200:
             self.token = response.json()["access_token"]
+            print("✅ OAuth token obtained")
         else:
-            raise Exception(f"Token error: {response.status_code}")
+            error_text = response.text
+            print(f"❌ Token error: {response.status_code}")
+            print(f"   Response: {error_text}")
+            raise Exception(f"Token error: {response.status_code} - {error_text}")
 
 
     async def get_rate(self):
@@ -178,4 +228,60 @@ class G2AApiClient:
             "total_loaded": len(all_offers)
         }
 
-    # ... (остальные методы остаются без изменений, скопирую из текущего файла)
+    @auto_refresh_token
+    async def update_price(self, offer_id, new_price):
+        """Обновление цены оффера"""
+        if not self.token:
+            raise Exception("No token available")
+
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        response = await self.session.patch(
+            f"{G2A_API_BASE}/v3/sales/offers/{offer_id}",
+            headers=headers,
+            json={"price": new_price}
+        )
+
+        if response.status_code == 200:
+            return {"success": True, "offer_id": offer_id, "new_price": new_price}
+        else:
+            error_text = response.text
+            if self.is_auth_error(response.status_code, error_text):
+                raise Exception(f"401 Unauthorized: {error_text}")
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {error_text}"
+            }
+
+    @auto_refresh_token
+    async def update_stock(self, offer_id, keys):
+        """Обновление стока оффера"""
+        if not self.token:
+            raise Exception("No token available")
+
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        response = await self.session.put(
+            f"{G2A_API_BASE}/v3/sales/offers/{offer_id}/inventory",
+            headers=headers,
+            json={"keys": keys}
+        )
+
+        if response.status_code == 200:
+            return {"success": True, "offer_id": offer_id, "keys_count": len(keys)}
+        else:
+            error_text = response.text
+            if self.is_auth_error(response.status_code, error_text):
+                raise Exception(f"401 Unauthorized: {error_text}")
+            return {
+                "success": False,
+                "error": f"HTTP {response.status_code}: {error_text}"
+            }
