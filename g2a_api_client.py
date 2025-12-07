@@ -85,7 +85,8 @@ class G2AApiClient:
             # Получаем наш seller_id
             my_seller_id = g2a_config.G2A_SELLER_ID
             
-            async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                 # Запрашиваем все офферы для продукта
                 response = await client.get(
                     f"{G2A_API_BASE}/v3/products/{product_id}/offers",
@@ -221,7 +222,8 @@ class G2AApiClient:
                 "⚙️ Настройки → G2A API → Сохранить"
             )
 
-        async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+        # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
             response = await client.post(
                 f"{api_base}/oauth/token",
                 json={
@@ -242,7 +244,8 @@ class G2AApiClient:
     async def get_rate(self):
         """Получение курса EUR/USD"""
         try:
-            async with httpx.AsyncClient(verify=False, timeout=10.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
                 response = await client.get("https://api.exchangerate-api.com/v4/latest/EUR")
                 if response.status_code == 200:
                     self.rate = response.json()["rates"]["USD"]
@@ -277,7 +280,8 @@ class G2AApiClient:
         all_offers = {}
         page = 1
 
-        async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+        # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
             while True:
                 response = await client.get(
                     f"{G2A_API_BASE}/v3/sales/offers",
@@ -352,7 +356,8 @@ class G2AApiClient:
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+                # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                     response = await client.get(url, params=params, headers=headers)
 
                     if response.status_code == 429:
@@ -448,7 +453,8 @@ class G2AApiClient:
         }
 
         try:
-            async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                 response = await client.post(
                     f"{G2A_API_BASE}/v3/sales/offers",
                     json=data,
@@ -494,7 +500,8 @@ class G2AApiClient:
         }
 
         try:
-            async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                 response = await client.get(
                     f"{G2A_API_BASE}/v3/jobs/{job_id}",
                     headers=headers
@@ -682,7 +689,8 @@ class G2AApiClient:
             "Content-Type": "application/json"
         }
 
-        async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+        # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+        async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
             response = await client.patch(
                 f"{G2A_API_BASE}/v3/sales/offers/{offer_id}",
                 json=update_data,
@@ -715,7 +723,8 @@ class G2AApiClient:
         }
 
         try:
-            async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                 response = await client.get(
                     f"{G2A_API_BASE}/v3/sales/offers/{offer_id}",
                     headers=headers
@@ -758,7 +767,8 @@ class G2AApiClient:
         }
 
         try:
-            async with httpx.AsyncClient(verify=False, timeout=30.0, trust_env=False) as client:
+            # ✅ ИСПРАВЛЕНО: Удалён trust_env=False
+            async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
                 response = await client.delete(
                     f"{G2A_API_BASE}/v3/sales/offers/{offer_id}",
                     headers=headers
