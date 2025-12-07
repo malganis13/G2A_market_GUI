@@ -180,16 +180,6 @@ class G2AApiClient:
             "total_loaded": len(all_offers)
         }
 
-
-    def is_auth_error(self, status_code, response_text=""):
-        """Проверка, является ли ошибка связанной с авторизацией"""
-        if status_code == 401:
-            return True
-
-        response_lower = response_text.lower()
-        auth_keywords = ["unauthorized", "invalid token", "token expired", "authentication failed"]
-        return any(keyword in response_lower for keyword in auth_keywords)
-
     @auto_refresh_token
     async def get_product_price(self, product_id):
         """Получение цены продукта с minPrice и retailMinBasePrice (с httpx)"""
@@ -259,6 +249,45 @@ class G2AApiClient:
                     return None
 
         return None
+
+    @auto_refresh_token
+    async def check_market_price(self, product_id):
+        """
+        ✅ НОВЫЙ МЕТОД: Проверка рыночной цены для автоизменения
+        
+        Использует get_product_price() и возвращает:
+        - success: bool
+        - market_price: float (минимальная цена конкурента)
+        - competitor_count: int (всегда 1+, т.к. есть минимум)
+        """
+        try:
+            price_data = await self.get_product_price(product_id)
+            
+            if not price_data:
+                return {
+                    "success": False,
+                    "error": "Не удалось получить цену"
+                }
+            
+            min_price = price_data.get("min_price", 0)
+            
+            if min_price and min_price > 0:
+                return {
+                    "success": True,
+                    "market_price": float(min_price),
+                    "competitor_count": 1  # Минимум 1 конкурент (если есть цена)
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": "Нет цены конкурента"
+                }
+        
+        except Exception as e:
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     @auto_refresh_token
     async def create_offer(self, product_id: str, price: float, quantity: int = 1, currency: str = "EUR",
