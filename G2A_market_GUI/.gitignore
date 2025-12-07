@@ -1,0 +1,45 @@
+# Database files
+*.db
+*.pyc
+__pycache__/
+
+# Virtual environments
+venv/
+venv\
+code/
+codePros/
+code\
+codePros\
+
+# Environment variables
+.env
+.env.local
+*.env
+
+# Logs
+logs/
+*.log
+
+# Configuration backups
+g2a_config_saved.json
+
+# Build artifacts
+build/
+dist/
+*.exe
+ngrok.exe
+
+# Temporary files
+temp_parsing/
+result/
+keys/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
