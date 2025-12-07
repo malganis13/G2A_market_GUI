@@ -34,7 +34,7 @@ if PYDANTIC_AVAILABLE:
         g2a_client_secret: str = Field(default="", description="G2A Client Secret")
         g2a_client_email: str = Field(default="", description="G2A Account Email")
         g2a_seller_id: str = Field(default="", description="G2A Seller ID (auto-detected)")
-        g2a_api_base: str = Field(default="https://gateway.g2a.com", description="G2A API Base URL")
+        g2a_api_base: str = Field(default="https://api.g2a.com", description="G2A API Base URL")  # ✅ ИСПРАВЛЕНО!
         
         # ===== Telegram =====
         telegram_bot_token: Optional[str] = Field(default=None, description="Telegram Bot Token")
@@ -99,7 +99,7 @@ else:
             self.g2a_client_secret = os.getenv("G2A_CLIENT_SECRET", "")
             self.g2a_client_email = os.getenv("G2A_CLIENT_EMAIL", "")
             self.g2a_seller_id = os.getenv("G2A_SELLER_ID", "")
-            self.g2a_api_base = os.getenv("G2A_API_BASE", "https://gateway.g2a.com")
+            self.g2a_api_base = os.getenv("G2A_API_BASE", "https://api.g2a.com")  # ✅ ИСПРАВЛЕНО!
             self.telegram_bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
             self.telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
             self.telegram_enabled = os.getenv("TELEGRAM_ENABLED", "false").lower() == "true"
