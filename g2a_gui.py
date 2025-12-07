@@ -48,9 +48,6 @@ class G2AAutomationGUI(ctk.CTk):
         
         # ✅ Выбранные офферы (чекбоксы)
         self.selected_offers = set()
-        
-        # ✅ НОВОЕ: Флаг загрузки
-        self.is_loading_offers = False
 
         # Авто-процесс
         self.auto_process = None
@@ -227,15 +224,14 @@ class G2AAutomationGUI(ctk.CTk):
         search_entry = ctk.CTkEntry(search_frame, textvariable=self.search_var, width=200, height=30)
         search_entry.pack(side="left", padx=5)
 
-        # ✅ УЛУЧШЕНО: Кнопка обновления с индикатором
-        self.refresh_btn = ctk.CTkButton(
+        # ✅ ИСПРАВЛЕНО: Простая кнопка без блокировки
+        ctk.CTkButton(
             search_frame,
             text="🔄 Обновить",
             command=self.load_offers,
             width=120,
             height=35
-        )
-        self.refresh_btn.pack(side="left", padx=5)
+        ).pack(side="left", padx=5)
 
         # ✅ ТАБЛИЦА С ЧЕКБОКСАМИ
         table_frame = ctk.CTkFrame(left_frame)
@@ -528,59 +524,22 @@ class G2AAutomationGUI(ctk.CTk):
             messagebox.showerror("Ошибка", f"Не удалось сохранить: {e}")
 
     def load_offers(self):
-        """✅ ИСПРАВЛЕНО: Улучшенная загрузка офферов с детальными ошибками"""
-        
-        # ✅ НОВОЕ: Проверка что уже не загружаем
-        if self.is_loading_offers:
-            messagebox.showwarning("Внимание", "Загрузка уже выполняется, подождите...")
-            return
-        
-        # ✅ НОВОЕ: Валидация настроек перед запросом
-        g2a_config.reload_config()
-        if not g2a_config.G2A_CLIENT_ID or not g2a_config.G2A_CLIENT_SECRET:
-            messagebox.showerror(
-                "Ошибка настроек",
-                "❌ Не заполнены данные G2A API!\n\n"
-                "Перейдите в:\n"
-                "⚙️ Настройки → G2A API\n\n"
-                "Заполните Client ID и Client Secret,\n"
-                "затем нажмите 'Сохранить'"
-            )
-            return
-        
-        print("\n" + "="*60)
-        print("🔄 НАЧАЛО ЗАГРУЗКИ ОФФЕРОВ")
-        print("="*60)
-        
-        # ✅ НОВОЕ: Блокируем кнопку и меняем текст
-        self.is_loading_offers = True
-        self.refresh_btn.configure(state="disabled", text="⏳ Загрузка...")
+        """✅ ИСПРАВЛЕНО: Взята рабочая логика из G2A_Rabochee"""
         
         def run():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
-            error_occurred = False
-            error_details = ""
-            
             try:
-                print("📡 Шаг 1: Создание API клиента...")
                 self.api_client = G2AApiClient()
-                
-                print("🔑 Шаг 2: Получение токена авторизации...")
-                print(f"   Client ID: {g2a_config.G2A_CLIENT_ID[:20]}...")
-                
+
+                print("Получение токена G2A...")
                 loop.run_until_complete(self.api_client.get_token())
-                print("✅ Токен получен успешно")
-                
-                print("📦 Шаг 3: Запрос списка офферов...")
+                print("✅ Токен получен")
+
+                print("Загрузка офферов...")
                 result = loop.run_until_complete(self.api_client.get_offers())
-                
-                print(f"📊 Получен результат: success={result.get('success')}")
-                
+
                 if result.get("success"):
-                    print("✅ Офферы успешно получены")
-                    
                     # Извлекаем seller_id
                     if result.get("offers_cache"):
                         first_offer = next(iter(result["offers_cache"].values()), None)
@@ -591,132 +550,24 @@ class G2AAutomationGUI(ctk.CTk):
                             print(f"✅ Seller ID установлен: {seller_id}")
 
                     self.offers_data = result.get("offers_cache", {})
-                    print(f"📦 Всего офферов загружено: {len(self.offers_data)}")
-                    
-                    # Обновляем таблицу
-                    print("🔄 Обновление таблицы GUI...")
-                    self.after(0, self.refresh_offers_table)
-                    print("✅ Таблица обновлена")
-                    
-                    # ✅ НОВОЕ: Успешное сообщение в GUI потоке
-                    self.after(0, lambda: messagebox.showinfo(
-                        "Успех", 
-                        f"✅ Загружено {len(self.offers_data)} офферов\n\n"
-                        f"Seller ID: {g2a_config.G2A_SELLER_ID or 'N/A'}"
-                    ))
-                    
-                    print("="*60)
-                    print("✅ ЗАГРУЗКА ОФФЕРОВ ЗАВЕРШЕНА")
-                    print("="*60 + "\n")
-                else:
-                    error_occurred = True
-                    error_msg = result.get("error", "Неизвестная ошибка")
-                    
-                    # ✅ НОВОЕ: Детальный разбор ошибки
-                    if "401" in str(error_msg) or "unauthorized" in str(error_msg).lower():
-                        error_details = (
-                            "🔐 ОШИБКА АВТОРИЗАЦИИ\n\n"
-                            "Возможные причины:\n"
-                            "1. Неверный Client ID или Client Secret\n"
-                            "2. Учётные данные устарели\n"
-                            "3. API ключ отозван\n\n"
-                            "Решение:\n"
-                            "• Проверьте данные в G2A Dashboard\n"
-                            "• Сгенерируйте новые ключи API\n"
-                            "• Сохраните новые данные в Настройках"
-                        )
-                    elif "timeout" in str(error_msg).lower():
-                        error_details = (
-                            "⏱️ ОШИБКА ТАЙМ-АУТА\n\n"
-                            "Сервер G2A не ответил вовремя.\n\n"
-                            "Решение:\n"
-                            "• Проверьте интернет-соединение\n"
-                            "• Попробуйте ещё раз через 1-2 минуты\n"
-                            "• Возможны проблемы на стороне G2A"
-                        )
-                    elif "404" in str(error_msg):
-                        error_details = (
-                            "🔍 РЕСУРС НЕ НАЙДЕН\n\n"
-                            "API endpoint не существует.\n\n"
-                            "Решение:\n"
-                            "• Проверьте обновления софта\n"
-                            "• Возможно G2A изменили API"
-                        )
-                    else:
-                        error_details = f"❌ ОШИБКА API\n\n{error_msg}"
-                    
-                    print(f"❌ ОШИБКА API: {error_msg}")
-                    
-                    # ✅ НОВОЕ: Показываем в GUI потоке
-                    self.after(0, lambda: messagebox.showerror(
-                        "Ошибка загрузки офферов",
-                        error_details
-                    ))
-                    
-            except Exception as e:
-                error_occurred = True
-                
-                print(f"\n{'='*60}")
-                print("❌ КРИТИЧЕСКАЯ ОШИБКА")
-                print(f"{'='*60}")
-                print(f"Тип ошибки: {type(e).__name__}")
-                print(f"Сообщение: {str(e)}")
-                print("\nПолный traceback:")
-                traceback.print_exc()
-                print(f"{'='*60}\n")
-                
-                # ✅ НОВОЕ: Детальная обработка исключений
-                error_type = type(e).__name__
-                error_msg = str(e)
-                
-                if "ConnectionError" in error_type or "timeout" in error_msg.lower():
-                    error_details = (
-                        "🌐 ОШИБКА ПОДКЛЮЧЕНИЯ\n\n"
-                        f"{error_type}: {error_msg}\n\n"
-                        "Решение:\n"
-                        "• Проверьте интернет-соединение\n"
-                        "• Отключите VPN/Proxy\n"
-                        "• Проверьте файрвол"
-                    )
-                elif "SSL" in error_type or "certificate" in error_msg.lower():
-                    error_details = (
-                        "🔒 ОШИБКА SSL СЕРТИФИКАТА\n\n"
-                        f"{error_type}: {error_msg}\n\n"
-                        "Решение:\n"
-                        "• Проверьте системное время\n"
-                        "• Обновите Python/библиотеки\n"
-                        "• Проверьте сертификаты системы"
-                    )
-                else:
-                    error_details = (
-                        f"💥 КРИТИЧЕСКАЯ ОШИБКА\n\n"
-                        f"Тип: {error_type}\n"
-                        f"Сообщение: {error_msg}\n\n"
-                        "Решение:\n"
-                        "• Проверьте консоль для деталей\n"
-                        "• Сделайте скриншот ошибки\n"
-                        "• Обратитесь к разработчику"
-                    )
-                
-                # ✅ НОВОЕ: Показываем в GUI потоке
-                self.after(0, lambda: messagebox.showerror(
-                    "Критическая ошибка",
-                    error_details
-                ))
-                
-            finally:
-                print("🔄 Закрытие event loop...")
-                loop.close()
-                print("✅ Event loop закрыт\n")
-                
-                # ✅ НОВОЕ: Разблокируем кнопку
-                self.is_loading_offers = False
-                self.after(0, lambda: self.refresh_btn.configure(
-                    state="normal", 
-                    text="🔄 Обновить"
-                ))
 
-        print("🚀 Запуск в отдельном потоке...")
+                    # Обновляем таблицу в GUI потоке
+                    self.after(0, self.refresh_offers_table)
+
+                    print(f"✅ Загружено {len(self.offers_data)} офферов")
+                    self.after(0, lambda: messagebox.showinfo("Готово", f"Загружено {len(self.offers_data)} офферов"))
+                else:
+                    error_msg = result.get("error", "Неизвестная ошибка")
+                    print(f"❌ Ошибка: {error_msg}")
+                    self.after(0, lambda: messagebox.showerror("Ошибка", f"Не удалось загрузить офферы:\n{error_msg}"))
+
+            except Exception as e:
+                print(f"❌ Исключение: {e}")
+                traceback.print_exc()
+                self.after(0, lambda: messagebox.showerror("Ошибка", f"Ошибка загрузки офферов:\n{str(e)}"))
+            finally:
+                loop.close()
+
         threading.Thread(target=run, daemon=True).start()
 
     def refresh_offers_table(self):
